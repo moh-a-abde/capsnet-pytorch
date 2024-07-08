@@ -201,7 +201,7 @@ if __name__ == '__main__':
     kwargs = {'num_workers': 1, 'pin_memory': True} if not args.no_cuda else {}
 
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('data/MNIST/raw', train=True, download=False,
+        datasets.MNIST('data/MNIST', train=True, download=False,
                        transform=transforms.Compose([
                            transforms.Pad(2), transforms.RandomCrop(28),
                            transforms.ToTensor()
@@ -209,7 +209,7 @@ if __name__ == '__main__':
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
     test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('data/MNIST/raw', train=False, transform=transforms.Compose([
+        datasets.MNIST('data/MNIST', train=False, transform=transforms.Compose([
             transforms.ToTensor()
         ])),
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
