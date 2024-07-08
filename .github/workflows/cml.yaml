@@ -1,0 +1,45 @@
+name: capsnet
+on: [push]
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.7'
+      - uses: iterative/setup-cml@v1
+
+      - name: Set up Python environment
+        run: |
+
+          # free disk space
+          #sudo swapoff -a
+          #sudo rm -f /swapfile
+          #sudo apt clean
+          #docker rmi $(docker image ls -aq)
+          #df -h
+          
+          #sudo rm -rf /tmp/*
+          #sudo rm -rf ~/.cache/pip
+          
+          # setup env
+          python -m pip install --upgrade pip
+          pip install virtualenv
+          virtualenv venv
+          source venv/bin/activate
+          pip install mamba
+          mamba init
+          source ~/.bashrc
+          mamba create
+          mamba activate
+          #pip install -r requirements.txt
+          
+      - name: Run Training
+        run: |
+          source venv/bin/activate
+          python main.py
