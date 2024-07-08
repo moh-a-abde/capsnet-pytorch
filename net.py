@@ -198,21 +198,20 @@ if __name__ == '__main__':
 
     torch.manual_seed(args.seed)
 
-    kwargs = {'num_workers': 0, 'pin_memory': True} if not args.no_cuda else {}
+    data_dir = './data'  # Ensure this directory contains the MNIST data files
 
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=True, download=True,
-                       transform=transforms.Compose([
-                           transforms.Pad(2), transforms.RandomCrop(28),
-                           transforms.ToTensor()
-                       ])),
-        batch_size=args.batch_size, shuffle=True, **kwargs)
-
-    test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=False, transform=transforms.Compose([
+        datasets.MNIST(data_dir, train=True, download=False, transform=transforms.Compose([
+            transforms.Pad(2), transforms.RandomCrop(28),
             transforms.ToTensor()
         ])),
-        batch_size=args.test_batch_size, shuffle=False, **kwargs)
+        batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
+
+    test_loader = torch.utils.data.DataLoader(
+        datasets.MNIST(data_dir, train=False, download=False, transform=transforms.Compose([
+            transforms.ToTensor()
+        ])),
+        batch_size=args.test_batch_size, shuffle=False, num_workers=0, pin_memory=True)
 
     model = CapsNet(args.routing_iterations)
 
@@ -224,8 +223,6 @@ if __name__ == '__main__':
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=15, min_lr=1e-6)
-
-    num_classes = 10
 
     loss_fn = MarginLoss(0.9, 0.1, 0.5, num_classes)
 
