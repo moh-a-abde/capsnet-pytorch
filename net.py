@@ -224,6 +224,8 @@ if __name__ == '__main__':
 
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, patience=15, min_lr=1e-6)
 
+    num_classes = 10
+    
     loss_fn = MarginLoss(0.9, 0.1, 0.5, num_classes)
 
     def train(epoch):
