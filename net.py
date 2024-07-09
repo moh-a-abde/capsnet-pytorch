@@ -174,7 +174,6 @@ if __name__ == '__main__':
     from torchvision import datasets, transforms
     from torch.optim import lr_scheduler
     import torch.nn.functional as F
-    import gc
 
     import os
     from torchvision import datasets, transforms
@@ -254,7 +253,6 @@ if __name__ == '__main__':
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
                            100. * batch_idx / len(train_loader), loss.item()))
-        gc.collect()
 
     def test():
         model.eval()
