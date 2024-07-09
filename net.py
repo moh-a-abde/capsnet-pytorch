@@ -143,7 +143,7 @@ class MarginLoss(nn.Module):
         return losses.mean() if size_average else losses.sum()
 
 if __name__ == '__main__':
-    data_path = 'data/MNIST'
+    data_path = 'data/'
 
     parser = argparse.ArgumentParser(description='CapsNet with MNIST')
     parser.add_argument('--batch-size', type=int, default=32, metavar='N',
@@ -166,7 +166,7 @@ if __name__ == '__main__':
 
     torch.manual_seed(args.seed)
 
-    kwargs = {'num_workers': 1, 'pin_memory': True} if not args.no_cuda else {}
+    kwargs = {'num_workers': 4, 'pin_memory': True} if not args.no_cuda else {}
 
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST(data_path, train=True, download=True,
