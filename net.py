@@ -207,7 +207,7 @@ if __name__ == '__main__':
     kwargs = {'num_workers': 1, 'pin_memory': True} if not args.no_cuda else {}
 
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST(data_path, train=True, download=False,
+        datasets.MNIST(data_path, train=True, download=True,
                            transform=transforms.Compose([
                            transforms.Pad(2), transforms.RandomCrop(28),
                            transforms.ToTensor()
