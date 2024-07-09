@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 from torch.optim import lr_scheduler
-from torch.autograd import Variable
 import argparse
 import torch.optim as optim
 from torchvision import datasets, transforms
@@ -98,7 +97,7 @@ class ReconstructionNet(nn.Module):
         self.n_classes = n_classes
 
     def forward(self, x, target):
-        mask = Variable(torch.zeros((x.size()[0], self.n_classes)), requires_grad=False)
+        mask = torch.zeros((x.size()[0], self.n_classes), requires_grad=False)
         if next(self.parameters()).is_cuda:
             mask = mask.cuda()
         mask.scatter_(1, target.view(-1, 1), 1.)
@@ -107,7 +106,7 @@ class ReconstructionNet(nn.Module):
         x = x.view(-1, self.n_dim * self.n_classes)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.sigmoid(self.fc3(x))
+        x = torch.sigmoid(self.fc3(x))
         return x
 
 class CapsNetWithReconstruction(nn.Module):
@@ -135,7 +134,7 @@ class MarginLoss(nn.Module):
         if targets.is_cuda:
             t = t.cuda()
         t = t.scatter_(1, targets.view(-1, 1), 1)
-        targets = Variable(t)
+        targets = t
         lengths = lengths.view(batch_size, -1, self.num_classes).mean(dim=1)
         if lengths.size(1) != targets.size(1):
             raise ValueError(f"lengths and targets have incompatible shapes: {lengths.size()} vs {targets.size()}")
