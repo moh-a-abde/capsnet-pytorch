@@ -1,20 +1,18 @@
-from __future__ import print_function
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-
 from torch.optim import lr_scheduler
 from torch.autograd import Variable
-
+import argparse
+import torch.optim as optim
+from torchvision import datasets, transforms
 
 def squash(x):
     lengths2 = x.pow(2).sum(dim=2)
     lengths = lengths2.sqrt()
     x = x * (lengths2 / (1 + lengths2) / lengths).view(x.size(0), x.size(1), 1)
     return x
-
 
 class AgreementRouting(nn.Module):
     def __init__(self, input_caps, output_caps, n_iterations):
@@ -23,19 +21,16 @@ class AgreementRouting(nn.Module):
         self.b = nn.Parameter(torch.zeros((input_caps, output_caps)))
 
     def forward(self, u_predict):
-    	batch_size, input_caps, output_caps, output_dim = u_predict.size()
-    	b_batch = self.b.expand((batch_size, input_caps, output_caps))
-    	c = F.softmax(b_batch.reshape(-1, output_caps), dim=-1).reshape(-1, input_caps, output_caps, 1)
-    	s = (c * u_predict).sum(dim=1)
-    	v = squash(s)
-    	if self.n_iterations > 0:
-        	for r in range(self.n_iterations):
-            		v = v.unsqueeze(1)
-            		b_batch = b_batch + (u_predict * v).sum(-1)
-    
-    	return v
-
-
+        batch_size, input_caps, output_caps, output_dim = u_predict.size()
+        b_batch = self.b.expand((batch_size, input_caps, output_caps))
+        c = F.softmax(b_batch.reshape(-1, output_caps), dim=-1).reshape(-1, input_caps, output_caps, 1)
+        s = (c * u_predict).sum(dim=1)
+        v = squash(s)
+        if self.n_iterations > 0:
+            for r in range(self.n_iterations):
+                v = v.unsqueeze(1)
+                b_batch = b_batch + (u_predict * v).sum(-1)
+        return v
 
 class CapsLayer(nn.Module):
     def __init__(self, input_caps, input_dim, output_caps, output_dim, routing_module):
@@ -59,7 +54,6 @@ class CapsLayer(nn.Module):
         v = self.routing_module(u_predict)
         return v
 
-
 class PrimaryCapsLayer(nn.Module):
     def __init__(self, input_channels, output_caps, output_dim, kernel_size, stride):
         super(PrimaryCapsLayer, self).__init__()
@@ -72,19 +66,16 @@ class PrimaryCapsLayer(nn.Module):
         out = self.conv(input)
         N, C, H, W = out.size()
         out = out.view(N, self.output_caps, self.output_dim, H, W)
-
-        # will output N x OUT_CAPS x OUT_DIM
         out = out.permute(0, 1, 3, 4, 2).contiguous()
         out = out.view(out.size(0), -1, out.size(4))
         out = squash(out)
         return out
 
-
 class CapsNet(nn.Module):
     def __init__(self, routing_iterations, n_classes=10):
         super(CapsNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 256, kernel_size=9, stride=1)
-        self.primaryCaps = PrimaryCapsLayer(256, 32, 8, kernel_size=9, stride=2)  # outputs 6*6
+        self.primaryCaps = PrimaryCapsLayer(256, 32, 8, kernel_size=9, stride=2)
         self.num_primaryCaps = 32 * 6 * 6
         routing_module = AgreementRouting(self.num_primaryCaps, n_classes, routing_iterations)
         self.digitCaps = CapsLayer(self.num_primaryCaps, 8, n_classes, 16, routing_module)
@@ -96,7 +87,6 @@ class CapsNet(nn.Module):
         x = self.digitCaps(x)
         probs = x.pow(2).sum(dim=2).sqrt()
         return x, probs
-
 
 class ReconstructionNet(nn.Module):
     def __init__(self, n_dim=16, n_classes=10):
@@ -120,7 +110,6 @@ class ReconstructionNet(nn.Module):
         x = F.sigmoid(self.fc3(x))
         return x
 
-
 class CapsNetWithReconstruction(nn.Module):
     def __init__(self, capsnet, reconstruction_net):
         super(CapsNetWithReconstruction, self).__init__()
@@ -131,7 +120,6 @@ class CapsNetWithReconstruction(nn.Module):
         x, probs = self.capsnet(x)
         reconstruction = self.reconstruction_net(x, target)
         return reconstruction, probs
-
 
 class MarginLoss(nn.Module):
     def __init__(self, m_pos, m_neg, lambda_, num_classes):
@@ -146,57 +134,33 @@ class MarginLoss(nn.Module):
         t = torch.zeros(batch_size, self.num_classes).long()
         if targets.is_cuda:
             t = t.cuda()
-
-        # Scatter targets into one-hot encoding
         t = t.scatter_(1, targets.view(-1, 1), 1)
         targets = Variable(t)
-
-        # Debug: Print tensor shapes
-        #print(f"lengths shape: {lengths.shape}")
-        #print(f"targets shape: {targets.shape}")
-
-        # Flatten the extra dimensions in lengths to match the target shape
         lengths = lengths.view(batch_size, -1, self.num_classes).mean(dim=1)
-
-        # Ensure lengths and targets have compatible shapes
         if lengths.size(1) != targets.size(1):
             raise ValueError(f"lengths and targets have incompatible shapes: {lengths.size()} vs {targets.size()}")
-
-        # Calculate the loss
         losses = targets.float() * F.relu(self.m_pos - lengths).pow(2) + \
                  self.lambda_ * (1. - targets.float()) * F.relu(lengths - self.m_neg).pow(2)
-        
         return losses.mean() if size_average else losses.sum()
 
 if __name__ == '__main__':
-    import argparse
-    import torch.optim as optim
-    from torchvision import datasets, transforms
-    from torch.optim import lr_scheduler
-    import torch.nn.functional as F
-
-    import os
-    from torchvision import datasets, transforms
-
-    # Set the path to the MNIST dataset
     data_path = 'data/MNIST'
 
-    # Training settings
     parser = argparse.ArgumentParser(description='CapsNet with MNIST')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-                    help='input batch size for training (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=250, metavar='N',
-                    help='input batch size for testing (default: 1000)')
+    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
+                        help='input batch size for training (default: 64)')
+    parser.add_argument('--test-batch-size', type=int, default=100, metavar='N',
+                        help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
-                    help='number of epochs to train (default: 10)')
+                        help='number of epochs to train (default: 10)')
     parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                    help='learning rate (default: 0.01)')
+                        help='learning rate (default: 0.01)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
-                    help='disables CUDA training')
+                        help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
+                        help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                    help='how many batches to wait before logging training status')
+                        help='how many batches to wait before logging training status')
     parser.add_argument('--routing_iterations', type=int, default=3)
     parser.add_argument('--with_reconstruction', action='store_true', default=False)
     args = parser.parse_args()
@@ -207,16 +171,16 @@ if __name__ == '__main__':
 
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST(data_path, train=True, download=True,
-                           transform=transforms.Compose([
+                       transform=transforms.Compose([
                            transforms.Pad(2), transforms.RandomCrop(28),
                            transforms.ToTensor()
-                   ])),
+                       ])),
         batch_size=args.batch_size, shuffle=True, **kwargs)
 
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST(data_path, train=False, transform=transforms.Compose([
             transforms.ToTensor()
-    ])),
+        ])),
         batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
     model = CapsNet(args.routing_iterations)
@@ -236,9 +200,9 @@ if __name__ == '__main__':
 
     def train(epoch):
         model.train()
+        optimizer.zero_grad()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data, target
-            optimizer.zero_grad()
             if args.with_reconstruction:
                 output, probs = model(data, target)
                 reconstruction_loss = F.mse_loss(output, data.view(-1, 784))
@@ -248,11 +212,13 @@ if __name__ == '__main__':
                 output, probs = model(data)
                 loss = loss_fn(probs, target)
             loss.backward()
-            optimizer.step()
+            if (batch_idx + 1) % args.batch_size == 0:
+                optimizer.step()
+                optimizer.zero_grad()
             if batch_idx % args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
-                           100. * batch_idx / len(train_loader), loss.item()))
+                    100. * batch_idx / len(train_loader), loss.item()))
 
     def test():
         model.eval()
@@ -263,13 +229,13 @@ if __name__ == '__main__':
                 if args.with_reconstruction:
                     output, probs = model(data, target)
                     reconstruction_loss = F.mse_loss(output, data.view(-1, 784), reduction='sum').item()
-                    test_loss += loss_fn(probs, target, reduction='sum').item()
+                    test_loss += loss_fn(probs, target, size_average=False).item()
                     test_loss += reconstruction_alpha * reconstruction_loss
                 else:
                     output, probs = model(data)
-                    test_loss += loss_fn(probs, target, reduction='sum').item()
+                    test_loss += loss_fn(probs, target, size_average=False).item()
 
-                pred = probs.data.max(1, keepdim=True)[1]  # get the index of the max probability
+                pred = probs.data.max(1, keepdim=True)[1]
                 correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
         test_loss /= len(test_loader.dataset)
@@ -285,6 +251,3 @@ if __name__ == '__main__':
         torch.save(model.state_dict(),
                    '{:03d}_model_dict_{}routing_reconstruction{}.pth'.format(epoch, args.routing_iterations,
                                                                              args.with_reconstruction))
-
-
-
